@@ -11,41 +11,42 @@ using System.Linq;
 
 namespace TFSUpgradeTeamProjectFeatures
 {
-    static class Iteration1
+    class Iteration4
     {
-        static readonly string _tfsVersion = ConfigurationManager.AppSettings["TfsVersion"].ToString();
-        static readonly string _rootLogFolder = ConfigurationManager.AppSettings["RootLogFolder"].ToString();
+        readonly static string _rootLogFolder = ConfigurationManager.AppSettings["RootLogFolder"].ToString();
+        readonly static string _configDbConnectionString = ConfigurationManager.AppSettings["ConfigDBConnectionString"].ToString();
+        readonly static string _tfsRootUrl = ConfigurationManager.AppSettings["TfsRootUrl"].ToString();
+        readonly static string _tfsVersion = ConfigurationManager.AppSettings["TfsVersion"].ToString();
 
-        public static void Process()
+        public static void Process(string[] args)
         {
+
             try
             {
+                int.TryParse(args[0], out int collectionsToRun);
+
                 Console.WriteLine("*** Scanning all Team Projects in all Team Project Collections ***");
 
-                string tfsRootUrl = ConfigurationManager.AppSettings["TfsRootUrl"].ToString();
-                Console.WriteLine("Tfs Root Url: " + tfsRootUrl);
+                Console.WriteLine("Tfs Root Url: " + _tfsRootUrl);
 
-                Uri tfsConfigurationServerUri = new Uri(tfsRootUrl);
+                Uri tfsConfigurationServerUri = new Uri(_tfsRootUrl);
                 TfsConfigurationServer configurationServer = TfsConfigurationServerFactory.GetConfigurationServer(tfsConfigurationServerUri);
                 ITeamProjectCollectionService tpcService = configurationServer.GetService<ITeamProjectCollectionService>();
 
-                string configDbConnectionString = ConfigurationManager.AppSettings["ConfigDBConnectionString"].ToString();
-                Console.WriteLine("Config DB Connectionstring: " + configDbConnectionString);
+                Console.WriteLine("Config DB Connectionstring: " + _configDbConnectionString);
 
-
-
-                using (IVssDeploymentServiceHost deploymentServiceHost = CreateDeploymentServiceHost(configDbConnectionString, _tfsVersion))
+                using (IVssDeploymentServiceHost deploymentServiceHost = CreateDeploymentServiceHost(_configDbConnectionString))
                 {
-                    foreach (TeamProjectCollection tpc in tpcService.GetCollections().OrderBy(tpc => tpc.Name))
+                    foreach (TeamProjectCollection tpc in tpcService.GetCollections().OrderBy(tpc => tpc.Name).Take(collectionsToRun))
                     {
                         string nameOfLogFile = "UpgradeTeamProjectFeatures-" + tpc.Name + ".txt";
-                        string fullPathOfLogFile = System.IO.Path.Combine(_rootLogFolder, nameOfLogFile);
-                        var logFile = new System.IO.StreamWriter(fullPathOfLogFile);
+                        string fullPathOfLogFile = Path.Combine(_rootLogFolder, nameOfLogFile);
+                        StreamWriter logFile = new StreamWriter(fullPathOfLogFile);
 
                         logFile.WriteLine(String.Format("*** scanning Team Projects in TPC {0} ***", tpc.Name));
                         logFile.WriteLine();
 
-                        string tpcUrl = tfsRootUrl + "/" + tpc.Name;
+                        string tpcUrl = _tfsRootUrl + "/" + tpc.Name;
                         TfsTeamProjectCollection tfsCollection = new TfsTeamProjectCollection(new Uri(tpcUrl));
 
                         WorkItemStore witStore = tfsCollection.GetService<WorkItemStore>();
@@ -77,15 +78,14 @@ namespace TFSUpgradeTeamProjectFeatures
             }
         }
 
-        private static IVssDeploymentServiceHost CreateDeploymentServiceHost(string configDbConnectionString, string tfsVersion)
+        private static IVssDeploymentServiceHost CreateDeploymentServiceHost(string configDbConnectionString)
         {
-            var deploymentHostProperties = new TeamFoundationServiceHostProperties
+            TeamFoundationServiceHostProperties deploymentHostProperties = new TeamFoundationServiceHostProperties
             {
-                HostType = TeamFoundationHostType.Deployment | TeamFoundationHostType.Application,
-                PlugInDirectory = Path.Combine(GetTfsInstallationDir(tfsVersion), @"Application Tier\TFSJobAgent\Plugins")
+                HostType = TeamFoundationHostType.Deployment | TeamFoundationHostType.ProjectCollection,
+                PlugInDirectory = Path.Combine(GetTfsInstallationDir(_tfsVersion), @"Application Tier\TFSJobAgent\Plugins")
             };
-            var sqlConnectionInfo = SqlConnectionInfoFactory.Create(configDbConnectionString, null, null);
-            return DeploymentServiceHostFactory.CreateDeploymentServiceHost(deploymentHostProperties, sqlConnectionInfo);
+            return DeploymentServiceHostFactory.CreateDeploymentServiceHost(deploymentHostProperties, SqlConnectionInfoFactory.Create(configDbConnectionString, null, null));
         }
 
         private static IVssRequestContext CreateServicingContext(IVssDeploymentServiceHost deploymentServiceHost, Guid instanceId)
@@ -158,7 +158,7 @@ namespace TFSUpgradeTeamProjectFeatures
 
         private static void ProvisionProject(IVssRequestContext context, Microsoft.TeamFoundation.WorkItemTracking.Client.Project project, ProjectFeatureProvisioningService projectFeatureProvisioningService, IProjectFeatureProvisioningDetails projectFeatureProvisioningDetail)
         {
-            projectFeatureProvisioningService.ProvisionFeatures(context, project.Uri.ToString(), projectFeatureProvisioningDetail.ProcessTemplateDescriptorId);
+            projectFeatureProvisioningService.ProvisionFeatures(context, project.Uri.ToString(), projectFeatureProvisioningDetail.ProcessTemplateDescriptorRowId);
         }
     }
 }
