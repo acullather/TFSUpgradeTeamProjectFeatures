@@ -110,10 +110,6 @@
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Iteration0.cs" />
-    <None Include="Iteration1.cs" />
-    <Compile Include="Iteration3.cs" />
-    <None Include="OldExample.cs" />
     <Compile Include="Iteration4.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
